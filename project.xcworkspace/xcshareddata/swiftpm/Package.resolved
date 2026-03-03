@@ -1,0 +1,97 @@
+{
+  "configs": {
+    "Debug": {},
+    "Release": {}
+  },
+  "buildSettings": {
+    "Debug": {
+      "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+      "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+      "CODE_SIGN_STYLE": "Automatic",
+      "CURRENT_PROJECT_VERSION": "1",
+      "DEVELOPMENT_ASSET_PATHS": "",
+      "ENABLE_PREVIEWS": "YES",
+      "GENERATE_INFOPLIST_FILE": "YES",
+      "INFOPLIST_FILE": "NovelReader/Info.plist",
+      "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
+      "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
+      "INFOPLIST_KEY_UILaunchScreen_Generation": "YES",
+      "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+      "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+      "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+      "LD_RUNPATH_SEARCH_PATHS": [
+        "$(inherited)",
+        "@executable_path/Frameworks"
+      ],
+      "MARKETING_VERSION": "1.0",
+      "PRODUCT_BUNDLE_IDENTIFIER": "com.yourcompany.novelreader",
+      "PRODUCT_NAME": "$(TARGET_NAME)",
+      "SKDROOT": "$(SDKROOT)",
+      "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+      "SUPPORTS_MACCATALYST": "NO",
+      "SWIFT_EMIT_LOC_STRINGS": "YES",
+      "SWIFT_VERSION": "5.0",
+      "TARGETED_DEVICE_FAMILY": "1,2",
+      "DEVELOPMENT_TEAM": ""
+    },
+    "Release": {
+      "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+      "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+      "CODE_SIGN_STYLE": "Automatic",
+      "CURRENT_PROJECT_VERSION": "1",
+      "DEVELOPMENT_ASSET_PATHS": "",
+      "ENABLE_PREVIEWS": "YES",
+      "GENERATE_INFOPLIST_FILE": "YES",
+      "INFOPLIST_FILE": "NovelReader/Info.plist",
+      "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
+      "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
+      "INFOPLIST_KEY_UILaunchScreen_Generation": "YES",
+      "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+      "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+      "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+      "LD_RUNPATH_SEARCH_PATHS": [
+        "$(inherited)",
+        "@executable_path/Frameworks"
+      ],
+      "MARKETING_VERSION": "1.0",
+      "PRODUCT_BUNDLE_IDENTIFIER": "com.yourcompany.novelreader",
+      "PRODUCT_NAME": "$(TARGET_NAME)",
+      "SDKROOT": "$(SDKROOT)",
+      "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+      "SUPPORTS_MACCATALYST": "NO",
+      "SWIFT_EMIT_LOC_STRINGS": "YES",
+      "SWIFT_VERSION": "5.0",
+      "TARGETED_DEVICE_FAMILY": "1,2",
+      "DEVELOPMENT_TEAM": "",
+      "VALIDATE_PRODUCT": "YES"
+    }
+  },
+  "targets": {
+    "NovelReader": {
+      "deploymentTarget": "16.0",
+      "enabledArchitectures": [],
+      "extensions": [],
+      "frameworks": [
+        "SwiftUI",
+        "Foundation",
+        "Combine",
+        "UniformTypeIdentifiers"
+      ],
+      "paths": {
+        "productType": "com.apple.product-type.application",
+        "sources": [
+          "NovelReaderApp.swift",
+          "Models/",
+          "Views/",
+          "Managers/",
+          "NovelReader/"
+        ]
+      },
+      "product": {
+        "name": "NovelReader",
+        "type": "application"
+      }
+    }
+  },
+  "version": "0.5.0"
+}
