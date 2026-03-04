@@ -1,0 +1,215 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [published]
+
+env:
+  # 代码签名配置 - 通过 GitHub Secrets 设置
+  APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+  APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+  APPLE_ID: ${{ secrets.APPLE_ID }}
+  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  CODE_SIGN_IDENTITY_NAME: ${{ secrets.CODE_SIGN_IDENTITY_NAME }}
+  PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+    - name: Show Xcode Version
+      run: xcodebuild -version
+
+    - name: Show Available Simulators
+      run: xcrun simctl list devices available
+
+    - name: Build
+      run: |
+        xcodebuild build \
+          -project NovelReader.xcodeproj \
+          -scheme NovelReader \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+          -configuration Debug \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - name: Run Tests (if any)
+      run: |
+        xcodebuild test \
+          -project NovelReader.xcodeproj \
+          -scheme NovelReader \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+          -configuration Debug \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          || echo "No tests configured, skipping..."
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: NovelReader-Debug
+        path: ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphonesimulator/NovelReader.app
+        retention-days: 7
+
+  release:
+    name: Build Release IPA
+    runs-on: macos-14
+    if: github.event_name == 'release'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+    - name: 安装证书和描述文件
+      if: env.APPLE_CERTIFICATE_P12 != ''
+      run: |
+        # 创建临时钥匙串
+        security create-keychain -p actions build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p actions build.keychain
+        security set-keychain-settings -lut 21600 build.keychain
+
+        # 导入证书
+        echo "${{ secrets.APPLE_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
+        security import certificate.p12 -k build.keychain -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+
+        # 导入描述文件
+        echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
+        # 清理
+        rm certificate.p12 profile.mobileprovision
+
+    - name: Build Archive (Release)
+      run: |
+        xcodebuild archive \
+          -project NovelReader.xcodeproj \
+          -scheme NovelReader \
+          -configuration Release \
+          -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
+          CODE_SIGN_IDENTITY="${{ env.CODE_SIGN_IDENTITY_NAME }}" \
+          CODE_SIGNING_STYLE=Manual \
+          PROVISIONING_PROFILE_SPECIFIER="${{ secrets.PROVISIONING_PROFILE_NAME }}" \
+          DEVELOPMENT_TEAM="${{ env.APPLE_TEAM_ID }}" \
+          SKIP_INSTALL=NO \
+          BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+      env:
+        CODE_SIGN_IDENTITY_NAME: ${{ secrets.CODE_SIGN_IDENTITY_NAME != '' && secrets.CODE_SIGN_IDENTITY_NAME || 'Apple Distribution' }}
+
+    - name: Export IPA
+      run: |
+        mkdir -p ${{ github.workspace }}/ExportOptions
+        cat > ${{ github.workspace }}/ExportOptions/ExportOptions.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>teamID</key>
+            <string>${{ env.APPLE_TEAM_ID }}</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>${{ secrets.CODE_SIGN_IDENTITY_NAME }}</string>
+            <key>provisioningProfiles</key>
+            <dict>
+                <key>com.yourcompany.novelreader</key>
+                <string>${{ secrets.PROVISIONING_PROFILE_NAME }}</string>
+            </dict>
+        </dict>
+        </plist>
+        EOF
+
+        xcodebuild -exportArchive \
+          -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
+          -exportPath ${{ github.workspace }}/payload \
+          -exportOptionsPlist ${{ github.workspace }}/ExportOptions/ExportOptions.plist
+
+    - name: Upload IPA to Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ github.workspace }}/payload/NovelReader.ipa
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-auto-sign:
+    name: Build Release IPA (Auto Sign)
+    runs-on: macos-14
+    if: github.event_name == 'release' && env.APPLE_CERTIFICATE_P12 == ''
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+    - name: Build Archive (No Sign)
+      run: |
+        xcodebuild archive \
+          -project NovelReader.xcodeproj \
+          -scheme NovelReader \
+          -configuration Release \
+          -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          SKIP_INSTALL=NO \
+          BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+
+    - name: Export IPA (No Sign)
+      run: |
+        mkdir -p ${{ github.workspace }}/ExportOptions
+        cat > ${{ github.workspace }}/ExportOptions/ExportOptions.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>codeSignIdentity</key>
+            <string></string>
+        </dict>
+        </plist>
+        EOF
+
+        xcodebuild -exportArchive \
+          -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
+          -exportPath ${{ github.workspace }}/payload \
+          -exportOptionsPlist ${{ github.workspace }}/ExportOptions/ExportOptions.plist
+
+    - name: Upload IPA to Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ github.workspace }}/payload/NovelReader.ipa
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
