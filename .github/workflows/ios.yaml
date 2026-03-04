@@ -8,15 +8,6 @@ on:
   release:
     types: [published]
 
-env:
-  # 代码签名配置 - 通过 GitHub Secrets 设置
-  APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-  APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-  APPLE_ID: ${{ secrets.APPLE_ID }}
-  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-  CODE_SIGN_IDENTITY_NAME: ${{ secrets.CODE_SIGN_IDENTITY_NAME }}
-  PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
-
 jobs:
   build:
     name: Build and Test
@@ -71,15 +62,27 @@ jobs:
     runs-on: macos-14
     if: github.event_name == 'release'
 
+    outputs:
+      has证书：${{ steps.check-secrets.outputs.has-certs }}
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+
+    - name: Check if secrets are configured
+      id: check-secrets
+      run: |
+        if [ -n "${{ secrets.APPLE_CERTIFICATE_P12 }}" ]; then
+          echo "has-certs=true" >> $GITHUB_OUTPUT
+        else
+          echo "has-certs=false" >> $GITHUB_OUTPUT
+        fi
 
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
     - name: 安装证书和描述文件
-      if: env.APPLE_CERTIFICATE_P12 != ''
+      if: steps.check-secrets.outputs.has-certs == 'true'
       run: |
         # 创建临时钥匙串
         security create-keychain -p actions build.keychain
@@ -102,105 +105,78 @@ jobs:
 
     - name: Build Archive (Release)
       run: |
-        xcodebuild archive \
-          -project NovelReader.xcodeproj \
-          -scheme NovelReader \
-          -configuration Release \
-          -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
-          CODE_SIGN_IDENTITY="${{ env.CODE_SIGN_IDENTITY_NAME }}" \
-          CODE_SIGNING_STYLE=Manual \
-          PROVISIONING_PROFILE_SPECIFIER="${{ secrets.PROVISIONING_PROFILE_NAME }}" \
-          DEVELOPMENT_TEAM="${{ env.APPLE_TEAM_ID }}" \
-          SKIP_INSTALL=NO \
-          BUILD_LIBRARY_FOR_DISTRIBUTION=YES
-      env:
-        CODE_SIGN_IDENTITY_NAME: ${{ secrets.CODE_SIGN_IDENTITY_NAME != '' && secrets.CODE_SIGN_IDENTITY_NAME || 'Apple Distribution' }}
+        if [ "${{ steps.check-secrets.outputs.has-certs }}" == "true" ]; then
+          xcodebuild archive \
+            -project NovelReader.xcodeproj \
+            -scheme NovelReader \
+            -configuration Release \
+            -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
+            CODE_SIGN_IDENTITY="${{ secrets.CODE_SIGN_IDENTITY_NAME }}" \
+            CODE_SIGNING_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="${{ secrets.PROVISIONING_PROFILE_NAME }}" \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+        else
+          xcodebuild archive \
+            -project NovelReader.xcodeproj \
+            -scheme NovelReader \
+            -configuration Release \
+            -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+        fi
 
     - name: Export IPA
       run: |
         mkdir -p ${{ github.workspace }}/ExportOptions
-        cat > ${{ github.workspace }}/ExportOptions/ExportOptions.plist << EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>method</key>
-            <string>ad-hoc</string>
-            <key>teamID</key>
-            <string>${{ env.APPLE_TEAM_ID }}</string>
-            <key>uploadBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <true/>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>signingCertificate</key>
-            <string>${{ secrets.CODE_SIGN_IDENTITY_NAME }}</string>
-            <key>provisioningProfiles</key>
-            <dict>
-                <key>com.yourcompany.novelreader</key>
-                <string>${{ secrets.PROVISIONING_PROFILE_NAME }}</string>
-            </dict>
-        </dict>
-        </plist>
-        EOF
-
-        xcodebuild -exportArchive \
-          -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
-          -exportPath ${{ github.workspace }}/payload \
-          -exportOptionsPlist ${{ github.workspace }}/ExportOptions/ExportOptions.plist
-
-    - name: Upload IPA to Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ${{ github.workspace }}/payload/NovelReader.ipa
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release-auto-sign:
-    name: Build Release IPA (Auto Sign)
-    runs-on: macos-14
-    if: github.event_name == 'release' && env.APPLE_CERTIFICATE_P12 == ''
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-
-    - name: Build Archive (No Sign)
-      run: |
-        xcodebuild archive \
-          -project NovelReader.xcodeproj \
-          -scheme NovelReader \
-          -configuration Release \
-          -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          SKIP_INSTALL=NO \
-          BUILD_LIBRARY_FOR_DISTRIBUTION=YES
-
-    - name: Export IPA (No Sign)
-      run: |
-        mkdir -p ${{ github.workspace }}/ExportOptions
-        cat > ${{ github.workspace }}/ExportOptions/ExportOptions.plist << EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>compileBitcode</key>
-            <false/>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>codeSignIdentity</key>
-            <string></string>
-        </dict>
-        </plist>
-        EOF
+        if [ "${{ steps.check-secrets.outputs.has-certs }}" == "true" ]; then
+          cat > ${{ github.workspace }}/ExportOptions/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>ad-hoc</string>
+              <key>teamID</key>
+              <string>${{ secrets.APPLE_TEAM_ID }}</string>
+              <key>uploadBitcode</key>
+              <false/>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>${{ secrets.CODE_SIGN_IDENTITY_NAME }}</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.yourcompany.novelreader</key>
+                  <string>${{ secrets.PROVISIONING_PROFILE_NAME }}</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+        else
+          cat > ${{ github.workspace }}/ExportOptions/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>development</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>codeSignIdentity</key>
+              <string></string>
+          </dict>
+          </plist>
+          EOF
+        fi
 
         xcodebuild -exportArchive \
           -archivePath ${{ github.workspace }}/build/NovelReader.xcarchive \
